@@ -1,8 +1,6 @@
 let rectDifference
-let moveList = []
-let simulatedMove = undefined
 
-function getNumberOfMills(player) {
+function getNumberOfMills(player, nodes) {
     let sum = 0
     let nodesOfPlayer = nodes.flat().filter(n => n.stone === player.color)
     for (const node of nodesOfPlayer) {
@@ -16,6 +14,24 @@ class GameState {
         this.computer = computer
         this.human = human
         this.nodes = nodes
+        this.currentPlayer = human
+    }
+
+    switchCurrentPlayer() {
+        this.currentPlayer = this.currentPlayer === computer ? this.human : this.computer
+    }
+
+    isGameOver() {
+        if ((this.human.phase === JUMP_PHASE && this.human.placedStones === 2) ||
+            (this.computer.phase === JUMP_PHASE && this.computer.placedStones === 2)) {
+            return true
+        } else {
+            return false
+        }
+    }
+
+    get otherPlayer() {
+        return this.currentPlayer === computer ? this.human : this.computer
     }
 
     copy() {
@@ -28,7 +44,7 @@ class GameState {
         newHuman.numberOfUnplacedStones = this.human.numberOfUnplacedStones
         newHuman.placedStones = this.human.placedStones
         newHuman.phase = this.human.phase
-
+        
 
         let newNodes = []
         for (let i = 0; i < 3; i++) {
@@ -39,36 +55,27 @@ class GameState {
             }
         }
 
-        return new GameState(newComputer, newHuman, newNodes)
+        let newGameState = new GameState(newComputer, newHuman, newNodes)
+        newGameState.currentPlayer = this.currentPlayer === this.human ? newHuman : newComputer
+        return newGameState
     }
 }
 
-function copyGameStat(oldGameState) {
-    let newNodes = []
-    for (let i = 0; i < 3; i++) {
-        newNodes[i] = []
-        
-        for (let j = 0; j < 8; j++) {
-            newNodes[i][j] = new Node(i, j, oldNodes[i][j].stone)
-        }
-    }
-
-    return newNodes
-}
-
-function generateTurns(player, oldNodes) {
-
-    let phase
-    let countStones = oldNodes.flat().filter(n => n.stone === player.color).length
-    if countStones
-    switch (phase) {
+function generateTurns(oldGameState) {
+    let moveList = []
+    switch (oldGameState.currentPlayer.phase) {
         case PLACE_PHASE:
             for (let i = 0; i < 3; i++) {
                 for (let j = 0; j < 8; j++) {
-                    let newNodes = copyNodes(oldNodes);
-                    if(newNodes.stone === EMPTY){
-                        newNodes.stone = player.color
-                        moveList.push(newNodes)
+                    let newGameState = oldGameState.copy()
+                    newGameState.switchCurrentPlayer()
+                    if (newGameState.nodes[i][j].stone === EMPTY) {
+                        newGameState.currentPlayer.placeStoneAt(newGameState.nodes[i][j])
+                        if (checkForClose(newGameState.nodes[i][j])) {
+                            let stoneToRemove = newGameState.nodes.flat().filter(n => n.stone === newGameState.otherPlayer.color)[0]
+                            newGameState.otherPlayer.removeStoneAt(stoneToRemove)
+                        }
+                        moveList.push(newGameState)
                     }
                 }
             }
@@ -77,32 +84,47 @@ function generateTurns(player, oldNodes) {
             break;
         case JUMP_PHASE:
             break;
+        default:
+            break;
     }
 
-
-
+    return moveList
 }
 
-function max(player, depth) {
-    if (depth == 0 || keineZuegeMehr(player))
-       return bewerten();
-    let maxWert = -Number.MIN_VALUE;
-    generiereMoeglicheZuege(player);
-    while (noch Zug da) {
-       fuehreNaechstenZugAus();
-       let wert = min(-spieler, depth-1);
-       macheZugRueckgaengig();
-       if (wert > maxWert) {
-          maxWert = wert;
-          if (depth == gewuenschteTiefe)
-             gespeicherterZug = Zug;
+function mill_max(oldGameState, depth, maxDepth) {
+    if (depth == 0) //|| keineZuegeMehr(oldGameState))
+       return {value: evaluateTurn(oldGameState), turn: null}
+    let maxWert = -Infinity;
+    let savedTurn
+    let states = generateTurns(oldGameState)
+    for (state of states) {
+       let res = mill_min(state, depth-1, maxDepth)
+       if (res.value > maxWert) {
+          maxWert = res.value;
+          if (depth == maxDepth)
+            savedTurn = state;
        }
     }
-    return maxWert;
+    return {value: maxWert, turn: savedTurn}
 }
 
-function min(player, depth) {
-    
+function evaluateTurn(state) {
+    return getNumberOfMills(state.computer, state.nodes) - getNumberOfMills(state.human, state.nodes)
+}
+
+function mill_min(oldGameState, depth, maxDepth) {
+    if (depth == 0) //|| keineZuegeMehr(oldGameState))
+        return {value: evaluateTurn(oldGameState), turn: null}
+    let minValue = Infinity
+    let savedTurn
+    let states = generateTurns(oldGameState)
+    for (state of states) {
+        let res = mill_max(state, depth-1, maxDepth)
+        if (res.value < minValue) {
+            minValue = res.value;
+        }
+    }
+    return {value: minValue, turn: null}
 }
 
 function getRandomInt(min, max) {
@@ -169,10 +191,10 @@ class Player {
     }
 
     removeStoneAt(node) {
-        if (checkForClose(node)) {
-            console.log("Geht nicht")
-            return false
-        }
+        // if (checkForClose(node)) {
+        //     console.log("Geht nicht")
+        //     return false
+        // }
 
         this.placedStones -= 1
         node.stone = EMPTY
@@ -207,19 +229,19 @@ class Human extends Player {
 class Computer extends Player {
     constructor(color) {
         super(color)
-        this.mode = RANDOM_MODE
+        this.mode = INFORMED_MODE
     }
 
     randomMove() {
         switch (this.phase) {
             case PLACE_PHASE: {
-                let flat = nodes.flat().filter(node => node.stone === EMPTY)
+                let flat = game.nodes.flat().filter(node => node.stone === EMPTY)
                 let i = getRandomInt(0, flat.length - 1)
                 this.placeStoneAt(flat[i])
                 break;
             }
             case MOVE_PHASE: {
-                let flat = nodes.flat()
+                let flat = game.nodes.flat()
                 let ownStones = flat.filter(n => n.stone === this.color && n.hasEmptyNeighbors())
                 let i = getRandomInt(0, ownStones.length - 1)
                 let possibleTargets = ownStones[i].adjecentNodes.filter(a => a.stone === EMPTY)
@@ -228,7 +250,7 @@ class Computer extends Player {
                 break;
             }   
             case JUMP_PHASE: {
-                let flat = nodes.flat()
+                let flat = game.nodes.flat()
                 let ownStones = flat.filter(n => n.stone === this.color)
                 let emptySpots = flat.filter(n => n.stone === EMPTY)
                 let i = getRandomInt(0, ownStones.length - 1)
@@ -242,13 +264,9 @@ class Computer extends Player {
     }
 
     informedMove() {
-        gespeicherterZug = null
-        let gewuenschteTiefe = 4
-        let bewertung = max(+1, gewuenschteTiefe)
-        if (gespeicherterZug === null)
-            es gab keine weiteren Zuege mehr
-        else
-            gespeicherterZug ausführen
+        let gewuenschteTiefe = 2
+        let bewertung = mill_max(game, gewuenschteTiefe, gewuenschteTiefe)
+        game = bewertung.turn
     }
 
     makeMove() {
@@ -344,29 +362,30 @@ function mouseReleased() {
         return
     }
 
-    const { phase } = human
+    const { phase } = game.human
     const { stone } = currentNode
-    if (human.waitsForTaking && stone !== EMPTY && stone !== human.color) {
-        let res = computer.removeStoneAt(currentNode)
+    if (game.human.waitsForTaking && stone !== EMPTY && stone !== game.human.color) {
+        let res = game.computer.removeStoneAt(currentNode)
         if (res === false) {
             return
         } else {
-            human.waitsForTaking = false
-            computer.makeMove()
+            game.human.waitsForTaking = false
+            game.computer.makeMove()
             return
         }
     }
 
-    if ((phase === MOVE_PHASE || phase === JUMP_PHASE) && human.selectedNode !== null) {
+    if ((phase === MOVE_PHASE || phase === JUMP_PHASE) && game.human.selectedNode !== null) {
         if (stone !== EMPTY) {
             return
         }
-        human.moveStone(human.selectedNode, currentNode)
-        human.selectedNode = null
+        game.human.moveStone(game.human.selectedNode, currentNode)
+        game.human.selectedNode = null
         if (checkForClose(currentNode) !== 0) {
-            human.waitsForTaking = true
+            game.human.waitsForTaking = true
         } else {
-            computer.makeMove()
+            game.computer.makeMove()
+            game.switchCurrentPlayer()
         }
 
         return
@@ -376,16 +395,17 @@ function mouseReleased() {
         if (currentNode.stone !== EMPTY) {
             return
         }
-        human.placeStoneAt(currentNode)
+        game.human.placeStoneAt(currentNode)
         if (checkForClose(currentNode) !== 0) {
-            human.waitsForTaking = true
+            game.human.waitsForTaking = true
         } else {
-            computer.makeMove()
+            game.computer.makeMove()
+            game.switchCurrentPlayer()
         }
         
     } else if (phase === MOVE_PHASE || phase === JUMP_PHASE) {
-        if (stone === human.color) {
-            human.selectedNode = currentNode
+        if (stone === game.human.color) {
+            game.human.selectedNode = currentNode
         }
     }
 }
@@ -419,8 +439,8 @@ function checkForClose(node) {
 }
 
 function findNodeCoords(action) {
-    for (let i = 0; i < nodes.length; i++) {
-        for (let j = 0; j < nodes[i].length; j++) {
+    for (let i = 0; i < game.nodes.length; i++) {
+        for (let j = 0; j < game.nodes[i].length; j++) {
             let vLength
             if (j % 2 !== 0) {
                 vLength = Math.sqrt(((rectDifference / 2 * (i + 1)) ** 2) * 2) 
@@ -430,7 +450,7 @@ function findNodeCoords(action) {
             let angle = 45 * j - 90
             let vector = p5.Vector.fromAngle(radians(angle), vLength)
 
-            action(nodes[i][j], vector.x, vector.y)
+            action(game.nodes[i][j], vector.x, vector.y)
         }
     }
 }
