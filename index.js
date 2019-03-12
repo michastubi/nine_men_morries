@@ -1,4 +1,8 @@
+const NUMBER_OF_STONES = 9
+const INTELLIGENZ = 4
+
 let rectDifference
+let turnCounter = 0
 
 function getNumberOfMills(player, nodes) {
     let sum = 0
@@ -7,6 +11,10 @@ function getNumberOfMills(player, nodes) {
         sum += checkForClose(node)
     }
     return sum
+}
+
+function getNumberOfStones(player, nodes) {
+    return nodes.flat().filter(n => n.stone === player.color).length
 }
 
 class GameState {
@@ -18,7 +26,7 @@ class GameState {
     }
 
     switchCurrentPlayer() {
-        this.currentPlayer = this.currentPlayer === computer ? this.human : this.computer
+        this.currentPlayer = this.currentPlayer instanceof Computer ? this.human : this.computer
     }
 
     isGameOver() {
@@ -31,7 +39,7 @@ class GameState {
     }
 
     get otherPlayer() {
-        return this.currentPlayer === computer ? this.human : this.computer
+        return this.currentPlayer instanceof Computer ? this.human : this.computer
     }
 
     copy() {
@@ -51,6 +59,7 @@ class GameState {
             newNodes[i] = []
             for (let j = 0; j < 8; j++) {
                 newNodes[i][j] = new Node(i, j, this.nodes[i][j].stone)
+                newNodes[i][j].opacity = this.nodes[i][j].opacity
             }
         }
         attachNodes(newNodes)
@@ -69,36 +78,96 @@ class GameState {
 
 function generateTurns(oldGameState) {
     let moveList = []
-    switch (oldGameState.currentPlayer.phase) {
-        case PLACE_PHASE:
-            for (let i = 0; i < 3; i++) {
-                for (let j = 0; j < 8; j++) {
-                    let newGameState = oldGameState.copy()
-                    newGameState.switchCurrentPlayer()
-                    if (newGameState.nodes[i][j].stone === EMPTY) {
-                        newGameState.currentPlayer.placeStoneAt(newGameState.nodes[i][j])
-                        if (checkForClose(newGameState.nodes[i][j])) {
-                            let stoneToRemove = newGameState.nodes.flat().filter(n => n.stone === newGameState.otherPlayer.color)[0]
-                            newGameState.otherPlayer.removeStoneAt(stoneToRemove)
+    switch (oldGameState.otherPlayer.phase) {
+    case PLACE_PHASE:
+        for (let i = 0; i < 3; i++) {
+            for (let j = 0; j < 8; j++) {
+                let newGameState = oldGameState.copy()
+                newGameState.switchCurrentPlayer()
+                if (newGameState.nodes[i][j].stone === EMPTY) {
+                    newGameState.currentPlayer.placeStoneAt(newGameState.nodes[i][j])
+                    if (checkForClose(newGameState.nodes[i][j])) {
+                        let stonesToRemove = newGameState.nodes.flat().filter(n => n.stone === newGameState.otherPlayer.color)
+                        for (const stone of stonesToRemove) {
+                            let newNewGameState = newGameState.copy()
+                            let stoneToRemove = newNewGameState.nodes.flat().find(n => n.equals(stone))
+                            let removed = newNewGameState.otherPlayer.removeStoneAt(stoneToRemove)
+                            if (removed){
+                                moveList.push(newNewGameState)
+                            }
                         }
+                    } else {
                         moveList.push(newGameState)
                     }
                 }
             }
-            break;
-        case MOVE_PHASE:
-            break;
-        case JUMP_PHASE:
-            break;
-        default:
-            break;
+        }
+        break;
+    case MOVE_PHASE:
+        let ownNodes = oldGameState.nodes.flat().filter(n => n.stone === oldGameState.otherPlayer.color)
+        for (let i = 0; i < ownNodes.length; i++) {
+            for (let j = 0; j < ownNodes[i].adjecentNodes.length; j++) {
+                let newGameState = oldGameState.copy()
+                let ownNodesNew = newGameState.nodes.flat().filter(n => n.stone === newGameState.otherPlayer.color)
+
+                newGameState.switchCurrentPlayer()
+                if (ownNodes[i].adjecentNodes[j].stone === EMPTY) {
+                    newGameState.currentPlayer.moveStone(ownNodesNew[i], ownNodesNew[i].adjecentNodes[j])
+                    if (checkForClose(ownNodesNew[i].adjecentNodes[j])) {
+                        let stonesToRemove = newGameState.nodes.flat().filter(n => n.stone === newGameState.otherPlayer.color)
+                        for (const stone of stonesToRemove) {
+                            let newNewGameState = newGameState.copy()
+                            let stoneToRemove = newNewGameState.nodes.flat().find(n => n.equals(stone))
+                            newNewGameState.otherPlayer.removeStoneAt(stoneToRemove)
+                            if (newNewGameState){
+                            moveList.push(newNewGameState)
+                            }
+                        }
+                    } else {
+                        moveList.push(newGameState)
+                    }
+                }                
+            }
+        }
+        break;
+    case JUMP_PHASE: {
+        let ownNodes = oldGameState.nodes.flat().filter(n => n.stone === oldGameState.otherPlayer.color)
+        for (let i = 0; i < ownNodes.length; i++) {
+            for (let j = 0; j < 3; j++) {
+                for (let k = 0; k < 8; k++) {
+                    let newGameState = oldGameState.copy()
+                    let ownNodesNew = newGameState.nodes.flat().filter(n => n.stone === newGameState.otherPlayer.color)
+                    newGameState.switchCurrentPlayer()
+                    if (newGameState.nodes[j][k].stone === EMPTY) {
+                        newGameState.currentPlayer.moveStone(ownNodesNew[i], newGameState.nodes[j][k])
+                        if (checkForClose(newGameState.nodes[j][k])) {
+                            let stonesToRemove = newGameState.nodes.flat().filter(n => n.stone === newGameState.otherPlayer.color)
+                            for (const stone of stonesToRemove) {
+                                let newNewGameState = newGameState.copy()
+                                let stoneToRemove = newNewGameState.nodes.flat().find(n => n.equals(stone))
+                                newNewGameState.otherPlayer.removeStoneAt(stoneToRemove)
+                                if (newNewGameState){
+                                    moveList.push(newNewGameState)
+                                }
+                            }
+                        } else {
+                            moveList.push(newGameState)
+                        }
+                    }                
+                }
+            }
+        }
+        break;
+    }
+    default:
+        break;
     }
 
     return moveList
 }
 
 function mill_max(oldGameState, depth, maxDepth) {
-    if (depth == 0) //|| keineZuegeMehr(oldGameState))
+    if (depth == 0 || oldGameState.isGameOver())
        return {value: evaluateTurn(oldGameState), turn: null}
     let maxWert = -Infinity;
     let savedTurn
@@ -115,11 +184,14 @@ function mill_max(oldGameState, depth, maxDepth) {
 }
 
 function evaluateTurn(state) {
-    return getNumberOfMills(state.computer, state.nodes) - getNumberOfMills(state.human, state.nodes)
+    let millCount = getNumberOfMills(state.computer, state.nodes) - getNumberOfMills(state.human, state.nodes)
+    let stoneCount = getNumberOfStones(state.computer, state.nodes) - getNumberOfStones(state.computer, state.nodes)
+
+    return millCount * 3 + stoneCount * 2
 }
 
 function mill_min(oldGameState, depth, maxDepth) {
-    if (depth == 0) //|| keineZuegeMehr(oldGameState))
+    if (depth == 0 || oldGameState.isGameOver())
         return {value: evaluateTurn(oldGameState), turn: null}
     let minValue = Infinity
     let states = generateTurns(oldGameState)
@@ -203,13 +275,15 @@ const PLACE_PHASE = 0
 const MOVE_PHASE = 1
 const JUMP_PHASE = 2
 
+
+
 const RANDOM_MODE = 0
 const INFORMED_MODE = 1
 
 class Player {
     constructor(color) {
         this.color = color
-        this.numberOfUnplacedStones = 9
+        this.numberOfUnplacedStones = NUMBER_OF_STONES
         this.placedStones = 0
         this.phase = PLACE_PHASE
     }
@@ -221,13 +295,13 @@ class Player {
     }
 
     removeStoneAt(node) {
-        // if (checkForClose(node)) {
-        //     console.log("Geht nicht")
-        //     return false
-        // }
+        if (checkForClose(node)) {
+            return false
+        }
 
         this.placedStones -= 1
         node.stone = EMPTY
+        node.opacity = 0
         if (this.phase === MOVE_PHASE && this.placedStones === 3) {
             this.phase = JUMP_PHASE
         }
@@ -294,7 +368,7 @@ class Computer extends Player {
     }
 
     informedMove() {
-        let maxDepth = 4
+        let maxDepth = INTELLIGENZ
         let bewertung = mill_max(game, maxDepth, maxDepth)
         game = bewertung.turn
     }
@@ -321,12 +395,17 @@ class Node {
             this.stone = EMPTY
         }
         
+        this.opacity = 0
         this.ring = ring
         this.pos = pos
     }
 
     hasEmptyNeighbors() {
         return this.adjecentNodes.filter(n => n.stone === EMPTY).length !== 0
+    }
+
+    equals(otherNode) {
+        return otherNode.pos === this.pos && otherNode.ring === this.ring
     }
 
     attach(node) {
@@ -378,6 +457,8 @@ function mouseReleased() {
         } else {
             game.human.waitsForTaking = false
             game.computer.makeMove()
+            turnCounter += 1
+            game.switchCurrentPlayer()
             return
         }
     }
@@ -392,6 +473,7 @@ function mouseReleased() {
             game.human.waitsForTaking = true
         } else {
             game.computer.makeMove()
+            turnCounter += 1
             game.switchCurrentPlayer()
         }
 
@@ -407,6 +489,7 @@ function mouseReleased() {
             game.human.waitsForTaking = true
         } else {
             game.computer.makeMove()
+            turnCounter += 1
             game.switchCurrentPlayer()
         }
         
@@ -479,8 +562,24 @@ function draw() {
                 stroke(255, 0, 0)
             }
             
-            fill(255)
+            node.opacity = constrain(node.opacity + 6, 0, 255)
+            fill(255, 255, 255, node.opacity)
             ellipse(x, y, 30, 30)
         }
     })
+
+    document.getElementById("computerStones").innerText = "Computer: " + game.computer.numberOfUnplacedStones
+    document.getElementById("humanStones").innerText = "Human: " + game.computer.numberOfUnplacedStones
+    document.getElementById("counter").innerText = "Turn counter of computer: " + turnCounter
+    document.getElementById("computerPhase").innerText = "Phase of computer: " + phaseToString(game.computer.phase)
+}
+
+function phaseToString(phase) {
+    switch (phase) {
+        case PLACE_PHASE: return "PLACE_PHASE"
+        case MOVE_PHASE:  return "MOVE_PHASE"
+        case JUMP_PHASE:  return "JUMP_PHASE"
+        default:
+            break;
+    }
 }
