@@ -44,12 +44,13 @@ class GameState {
         newHuman.numberOfUnplacedStones = this.human.numberOfUnplacedStones
         newHuman.placedStones = this.human.placedStones
         newHuman.phase = this.human.phase
+        newHuman.waitsForTaking = this.human.waitsForTaking
+        newHuman.selectedNode = this.human.selectedNode
         
 
         let newNodes = []
         for (let i = 0; i < 3; i++) {
             newNodes[i] = []
-
             for (let j = 0; j < 8; j++) {
                 newNodes[i][j] = new Node(i, j, this.nodes[i][j].stone)
             }
@@ -97,13 +98,13 @@ function mill_max(oldGameState, depth, maxDepth) {
     let maxWert = -Infinity;
     let savedTurn
     let states = generateTurns(oldGameState)
-    for (state of states) {
-       let res = mill_min(state, depth-1, maxDepth)
-       if (res.value > maxWert) {
+    for (let state of states) {
+        let res = mill_min(state, depth-1, maxDepth)
+        if (res.value > maxWert) {
           maxWert = res.value;
           if (depth == maxDepth)
             savedTurn = state;
-       }
+        }
     }
     return {value: maxWert, turn: savedTurn}
 }
@@ -116,9 +117,8 @@ function mill_min(oldGameState, depth, maxDepth) {
     if (depth == 0) //|| keineZuegeMehr(oldGameState))
         return {value: evaluateTurn(oldGameState), turn: null}
     let minValue = Infinity
-    let savedTurn
     let states = generateTurns(oldGameState)
-    for (state of states) {
+    for (let state of states) {
         let res = mill_max(state, depth-1, maxDepth)
         if (res.value < minValue) {
             minValue = res.value;
@@ -264,8 +264,8 @@ class Computer extends Player {
     }
 
     informedMove() {
-        let gewuenschteTiefe = 2
-        let bewertung = mill_max(game, gewuenschteTiefe, gewuenschteTiefe)
+        let maxDepth = 2
+        let bewertung = mill_max(game, maxDepth, maxDepth)
         game = bewertung.turn
     }
 
@@ -285,7 +285,7 @@ class Computer extends Player {
 class Node {
     constructor(ring, pos, color) {
         this.adjecentNodes = []
-        if (color) {
+        if (color !== undefined) {
             this.stone = color
         } else {
             this.stone = EMPTY
@@ -293,7 +293,6 @@ class Node {
         
         this.ring = ring
         this.pos = pos
-
     }
 
     hasEmptyNeighbors() {
