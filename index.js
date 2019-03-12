@@ -45,15 +45,20 @@ class GameState {
         newHuman.placedStones = this.human.placedStones
         newHuman.phase = this.human.phase
         newHuman.waitsForTaking = this.human.waitsForTaking
-        newHuman.selectedNode = this.human.selectedNode
-        
-
+ 
         let newNodes = []
         for (let i = 0; i < 3; i++) {
             newNodes[i] = []
             for (let j = 0; j < 8; j++) {
                 newNodes[i][j] = new Node(i, j, this.nodes[i][j].stone)
             }
+        }
+        attachNodes(newNodes)
+
+        if (this.human.selectedNode !== null) {
+            let i = this.human.selectedNode.ring
+            let j = this.human.selectedNode.pos
+            newHuman.selectedNode = newNodes[i][j]
         }
 
         let newGameState = new GameState(newComputer, newHuman, newNodes)
@@ -163,6 +168,31 @@ function setupNodes() {
     return nodes
 }
 
+function attachNodes(nodes) {
+    for (let i = 0; i < nodes.length; i++) {
+        for (let j = 0; j < nodes[i].length; j++) {
+            if (j % 2 === 0) {
+                if (i >= 1) {
+                    nodes[i][j].attach(nodes[i - 1][j])
+                }
+                if(i <= 1){
+                    nodes[i][j].attach(nodes[i + 1][j])
+                }
+            }
+            if (j === 7) {
+                nodes[i][j].attach(nodes[i][6])
+                nodes[i][j].attach(nodes[i][0])
+            } else if (j === 0) {
+                nodes[i][j].attach(nodes[i][7])
+                nodes[i][j].attach(nodes[i][1])
+            } else {
+                nodes[i][j].attach(nodes[i][j - 1])
+                nodes[i][j].attach(nodes[i][j + 1])
+            }
+        }
+    }
+}
+
 
 // Enumerations //
 const EMPTY = 0
@@ -264,7 +294,7 @@ class Computer extends Player {
     }
 
     informedMove() {
-        let maxDepth = 2
+        let maxDepth = 4
         let bewertung = mill_max(game, maxDepth, maxDepth)
         game = bewertung.turn
     }
@@ -316,29 +346,7 @@ function setup() {
     edgeDistance = 40;
     rectDifference = width / 3.5
 
-    for (let i = 0; i < nodes.length; i++) {
-        for (let j = 0; j < nodes[i].length; j++) {
-            if (j % 2 === 0) {
-                if (i >= 1) {
-                    nodes[i][j].attach(nodes[i - 1][j])
-                }
-                if(i <= 1){
-                    nodes[i][j].attach(nodes[i + 1][j])
-                }
-            }
-            if (j === 7) {
-                nodes[i][j].attach(nodes[i][6])
-                nodes[i][j].attach(nodes[i][0])
-            } else if (j === 0) {
-                nodes[i][j].attach(nodes[i][7])
-                nodes[i][j].attach(nodes[i][1])
-            } else {
-                nodes[i][j].attach(nodes[i][j - 1])
-                nodes[i][j].attach(nodes[i][j + 1])
-            }
-        }
-    }
-
+    attachNodes(nodes)
     console.log(nodes)
 
     translate(width/2, height/2)
